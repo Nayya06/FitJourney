@@ -91,14 +91,26 @@ export function useFitnessData() {
   const addVideo = async (video: Video) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    await supabase.from('videos').upsert({
-      id: video.id,
+    
+    console.log("正在尝试保存视频到数据库:", video);
+
+    const { error } = await supabase.from('videos').upsert({
+      id: video.id || Date.now().toString(), // 确保绝对有个 ID
       user_id: user.id,
-      title: video.title,
+      title: video.title || 'Untitled Video',
       url: video.url,
-      thumbnail: video.thumbnail,
-      duration: video.duration
+      thumbnail: video.thumbnail || '',
+      duration: video.duration || ''
     });
+    
+    // 如果数据库拒绝，立刻弹窗报错！
+    if (error) {
+      console.error("数据库拒绝保存视频！原因:", error);
+      alert("视频保存失败: " + error.message);
+      return; // 失败了就不更新本地画面
+    }
+    
+    // 只有数据库真正保存成功了，画面才会多出一个视频
     setState(s => ({ ...s, videos: [...s.videos, video] }));
   };
 
