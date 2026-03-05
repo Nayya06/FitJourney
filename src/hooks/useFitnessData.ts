@@ -10,23 +10,23 @@ export function useFitnessData() {
     activePlanId: null,
     records: {},
   });
+  
+  // 新增：专门跟踪“云端数据是否正在下载”的状态
+  const [isDataLoading, setIsDataLoading] = useState(true);
 
-  // 页面加载时从云端拉取所有数据
   useEffect(() => {
     async function fetchData() {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        setIsDataLoading(false);
+        return;
+      }
 
-      // 1. 获取主题色
       const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-      // 2. 获取计划
       const { data: plans } = await supabase.from('fitness_plans').select('*').eq('user_id', user.id);
-      // 3. 获取打卡记录
       const { data: records } = await supabase.from('daily_records').select('*').eq('user_id', user.id);
-      // 4. 获取视频 (修复：之前这里漏掉了)
       const { data: videos } = await supabase.from('videos').select('*').eq('user_id', user.id);
 
-      // 整理记录数据
       const formattedRecords: Record<string, Record<number, DayRecord>> = {};
       records?.forEach(r => {
         if (!formattedRecords[r.plan_id]) formattedRecords[r.plan_id] = {};
@@ -37,12 +37,20 @@ export function useFitnessData() {
         };
       });
 
-      // 修复：处理 plans 的字段映射 (数据库的 total_days 映射回前端的 totalDays)
       const formattedPlans = plans?.map(p => ({
         id: p.id,
         name: p.name,
         totalDays: p.total_days || p.totalDays, 
         phases: p.phases || []
+      })) || [];
+
+      // 确保从数据库拿到的视频格式正确
+      const formattedVideos = videos?.map(v => ({
+        id: v.id,
+        title: v.title,
+        url: v.url,
+        thumbnail: v.thumbnail,
+        duration: v.duration
       })) || [];
 
       setState(s => ({
@@ -51,43 +59,34 @@ export function useFitnessData() {
         plans: formattedPlans,
         activePlanId: formattedPlans[0]?.id || null,
         records: formattedRecords,
-        // 修复：把获取到的视频装进状态。如果没有，就用空数组。
-        videos: videos || [] 
+        videos: formattedVideos 
       }));
+      
+      // 数据全部装载完毕，关闭 Loading
+      setIsDataLoading(false);
     }
+    
     fetchData();
   }, []);
 
-  // 保存计划
   const savePlan = async (plan: Plan) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    
-    // 同步到 Supabase
     await supabase.from('fitness_plans').upsert({
       id: plan.id,
       user_id: user.id,
       name: plan.name,
-      total_days: plan.totalDays || (plan as any).total_days, // 兼容处理字段名
+      total_days: plan.totalDays || (plan as any).total_days,
       phases: plan.phases
     });
-    
-    // 更新本地状态
-    setState(s => ({ 
-      ...s, 
-      plans: [...s.plans.filter(p => p.id !== plan.id), plan], 
-      activePlanId: plan.id 
-    }));
+    setState(s => ({ ...s, plans: [...s.plans.filter(p => p.id !== plan.id), plan], activePlanId: plan.id }));
   };
 
-  // 更新每日记录
   const updateDayRecord = async (planId: string, dayNum: number, update: Partial<DayRecord>) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    
     const current = state.records[planId]?.[dayNum] || { taskStatus: {} };
     const merged = { ...current, ...update };
-
     await supabase.from('daily_records').upsert({
       user_id: user.id,
       plan_id: planId,
@@ -96,38 +95,33 @@ export function useFitnessData() {
       notes: merged.notes,
       completed_at: merged.completedAt
     });
-
-    setState(s => ({
-      ...s,
-      records: { ...s.records, [planId]: { ...s.records[planId], [dayNum]: merged } }
-    }));
+    setState(s => ({ ...s, records: { ...s.records, [planId]: { ...s.records[planId], [dayNum]: merged } } }));
   };
 
-  // 修复 1：完成“添加视频”逻辑
   const addVideo = async (video: Video) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     
+    // 修复点：精准映射字段，防止因为多了奇怪的属性被数据库拒收
     await supabase.from('videos').upsert({
       id: video.id,
       user_id: user.id,
-      ...video // 将视频的具体内容推入数据库
+      title: video.title,
+      url: video.url,
+      thumbnail: video.thumbnail,
+      duration: video.duration
     });
     
     setState(s => ({ ...s, videos: [...s.videos, video] }));
   };
 
-  // 修复 2：完成“删除视频”逻辑
   const deleteVideo = async (videoId: string) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    
     await supabase.from('videos').delete().eq('id', videoId).eq('user_id', user.id);
-    
     setState(s => ({ ...s, videos: s.videos.filter(v => v.id !== videoId) }));
   };
 
-  // 修复 3：修改颜色时也保存到 Supabase，刷新不再丢失
   const setThemeColor = async (color: string) => {
     setState(s => ({ ...s, themeColor: color }));
     const { data: { user } } = await supabase.auth.getUser();
@@ -136,7 +130,6 @@ export function useFitnessData() {
     }
   };
 
-  // 提供给 Dashboard 的打卡切换功能
   const toggleTask = async (planId: string, dayNum: number, videoId: string) => {
     const currentRecord = state.records[planId]?.[dayNum] || { taskStatus: {} };
     const isCompleted = currentRecord.taskStatus[videoId];
@@ -146,6 +139,7 @@ export function useFitnessData() {
 
   return {
     state,
+    isDataLoading, // 暴露给 App.tsx 使用
     savePlan,
     updateDayRecord,
     setThemeColor,
