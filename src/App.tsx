@@ -72,10 +72,13 @@ export default function App() {
         </div>
       </header>
 
-      {/* 移动端顶部 */}
+      {/* 移动端顶部 (放大 Logo 和字体，保持高度不变) */}
       <header className="md:hidden bg-white border-b border-gray-100 sticky top-0 z-50 px-4 h-14 flex items-center justify-center shadow-sm">
-        <span className="text-lg font-bold text-gray-900 flex items-center gap-2">
-          <span className="h-6 w-6 bg-theme-500 rounded flex items-center justify-center text-white text-[10px]">F</span>
+        <span className="text-xl font-bold text-gray-900 flex items-center gap-2.5 tracking-tight">
+          {/* Logo 尺寸从 w-6 升级到 w-7，字体从 text-[10px] 升级到 text-sm */}
+          <span className="h-7 w-7 bg-theme-500 rounded-[8px] flex items-center justify-center text-white text-sm font-black shadow-sm">
+            F
+          </span>
           FitJourney
         </span>
       </header>
