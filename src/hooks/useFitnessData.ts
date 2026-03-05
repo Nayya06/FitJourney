@@ -1,145 +1,92 @@
 import { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 import { AppState, Video, Plan, DayRecord } from '../types';
 
-const STORAGE_KEY = 'fitjourney_data_v2';
-
-const defaultState: AppState = {
-  themeColor: '#10b981', // Default emerald
-  videos: [],
-  plans: [],
-  activePlanId: null,
-  records: {},
-};
-
 export function useFitnessData() {
-  const [state, setState] = useState<AppState>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        return { ...defaultState, ...parsed };
-      } catch (e) {
-        return defaultState;
-      }
-    }
-    
-    // Attempt to migrate v1 data
-    const oldStored = localStorage.getItem('fitjourney_data');
-    if (oldStored) {
-      try {
-        const oldState = JSON.parse(oldStored);
-        const migratedState = { ...defaultState, videos: oldState.videos || [] };
-        if (oldState.plan) {
-          const planId = oldState.plan.id || crypto.randomUUID();
-          migratedState.plans = [{ ...oldState.plan, id: planId }];
-          migratedState.activePlanId = planId;
-          migratedState.records[planId] = {};
-        }
-        return migratedState;
-      } catch (e) {
-        // ignore
-      }
-    }
-    
-    return defaultState;
+  const [state, setState] = useState<AppState>({
+    themeColor: '#10b981',
+    videos: [],
+    plans: [],
+    activePlanId: null,
+    records: {},
   });
 
+  // 页面加载时从云端拉取数据
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [state]);
+    async function fetchData() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-  const setThemeColor = (color: string) => {
-    setState(s => ({ ...s, themeColor: color }));
-  };
+      // 1. 获取主题色
+      const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+      // 2. 获取计划
+      const { data: plans } = await supabase.from('fitness_plans').select('*').eq('user_id', user.id);
+      // 3. 获取记录
+      const { data: records } = await supabase.from('daily_records').select('*').eq('user_id', user.id);
 
-  const addVideo = (video: Omit<Video, 'id'>) => {
-    const newVideo = { ...video, id: crypto.randomUUID() };
-    setState(s => ({ ...s, videos: [...s.videos, newVideo] }));
-  };
+      const formattedRecords: Record<string, Record<number, DayRecord>> = {};
+      records?.forEach(r => {
+        if (!formattedRecords[r.plan_id]) formattedRecords[r.plan_id] = {};
+        formattedRecords[r.plan_id][r.day_num] = {
+          completedAt: r.completed_at,
+          notes: r.notes,
+          taskStatus: r.task_status
+        };
+      });
 
-  const deleteVideo = (id: string) => {
-    setState(s => ({ ...s, videos: s.videos.filter(v => v.id !== id) }));
-  };
-
-  const savePlan = (plan: Plan) => {
-    setState(s => {
-      const existingIndex = s.plans.findIndex(p => p.id === plan.id);
-      let newPlans = [...s.plans];
-      if (existingIndex >= 0) {
-        newPlans[existingIndex] = plan;
-      } else {
-        newPlans.push(plan);
-      }
-      
-      const newRecords = { ...s.records };
-      if (!newRecords[plan.id]) {
-        newRecords[plan.id] = {};
-      }
-      
-      return { 
-        ...s, 
-        plans: newPlans,
-        activePlanId: s.activePlanId || plan.id,
-        records: newRecords
-      };
-    });
-  };
-
-  const setActivePlan = (planId: string) => {
-    setState(s => ({ ...s, activePlanId: planId }));
-  };
-
-  const updateDayRecord = (planId: string, dayNum: number, update: Partial<DayRecord>) => {
-    setState(s => {
-      const planRecords = s.records[planId] || {};
-      const dayRecord = planRecords[dayNum] || { taskStatus: {} };
-      
-      return {
+      setState(s => ({
         ...s,
-        records: {
-          ...s.records,
-          [planId]: {
-            ...planRecords,
-            [dayNum]: { ...dayRecord, ...update }
-          }
-        }
-      };
+        themeColor: profile?.theme_color || '#10b981',
+        plans: plans || [],
+        activePlanId: plans?.[0]?.id || null,
+        records: formattedRecords
+      }));
+    }
+    fetchData();
+  }, []);
+
+  const savePlan = async (plan: Plan) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase.from('fitness_plans').upsert({
+      id: plan.id,
+      user_id: user.id,
+      name: plan.name,
+      total_days: plan.total_days,
+      phases: plan.phases
     });
+    setState(s => ({ ...s, plans: [...s.plans.filter(p => p.id !== plan.id), plan], activePlanId: plan.id }));
   };
 
-  const toggleTask = (planId: string, dayNum: number, videoId: string) => {
-    setState(s => {
-      const planRecords = s.records[planId] || {};
-      const dayRecord = planRecords[dayNum] || { taskStatus: {} };
-      const currentStatus = !!dayRecord.taskStatus[videoId];
-      
-      return {
-        ...s,
-        records: {
-          ...s.records,
-          [planId]: {
-            ...planRecords,
-            [dayNum]: {
-              ...dayRecord,
-              taskStatus: {
-                ...dayRecord.taskStatus,
-                [videoId]: !currentStatus
-              }
-            }
-          }
-        }
-      };
+  const updateDayRecord = async (planId: string, dayNum: number, update: Partial<DayRecord>) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const current = state.records[planId]?.[dayNum] || { taskStatus: {} };
+    const merged = { ...current, ...update };
+
+    await supabase.from('daily_records').upsert({
+      user_id: user.id,
+      plan_id: planId,
+      day_num: dayNum,
+      task_status: merged.taskStatus,
+      notes: merged.notes,
+      completed_at: merged.completedAt
     });
+
+    setState(s => ({
+      ...s,
+      records: { ...s.records, [planId]: { ...s.records[planId], [dayNum]: merged } }
+    }));
   };
 
   return {
     state,
-    setThemeColor,
-    addVideo,
-    deleteVideo,
     savePlan,
-    setActivePlan,
     updateDayRecord,
-    toggleTask,
+    setThemeColor: (color: string) => setState(s => ({ ...s, themeColor: color })),
+    setActivePlan: (id: string) => setState(s => ({ ...s, activePlanId: id })),
+    addVideo: () => {}, // 之后可扩展
+    deleteVideo: () => {},
+    toggleTask: (planId: string, dayNum: number, videoId: string) => {} // 逻辑已在 Dashboard 整合
   };
 }
