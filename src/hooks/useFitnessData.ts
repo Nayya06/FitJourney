@@ -75,17 +75,32 @@ export function useFitnessData() {
   const updateDayRecord = async (planId: string, dayNum: number, update: Partial<DayRecord>) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
+    
     const current = state.records[planId]?.[dayNum] || { taskStatus: {} };
     const merged = { ...current, ...update };
-    await supabase.from('daily_records').upsert({
+
+    // 🌟 修复 1：乐观更新 (Optimistic UI) - 瞬间改变页面状态，绝对不卡顿！
+    setState(s => ({
+      ...s,
+      records: { 
+        ...s.records, 
+        [planId]: { ...s.records[planId], [dayNum]: merged } 
+      }
+    }));
+
+    // 🌟 修复 2：加上 onConflict，解决刷新后状态丢失的致命 Bug！
+    const { error } = await supabase.from('daily_records').upsert({
       user_id: user.id,
       plan_id: planId,
       day_num: dayNum,
       task_status: merged.taskStatus,
       notes: merged.notes,
       completed_at: merged.completedAt
+    }, {
+      onConflict: 'user_id, plan_id, day_num' // 告诉数据库：如果今天已经打过卡了，就覆盖它，不要拒绝！
     });
-    setState(s => ({ ...s, records: { ...s.records, [planId]: { ...s.records[planId], [dayNum]: merged } } }));
+
+    if (error) console.error("打卡同步失败:", error.message);
   };
 
   const addVideo = async (video: Video) => {
