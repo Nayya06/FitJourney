@@ -1,134 +1,134 @@
 import React, { useState } from 'react';
 import { Video } from '../types';
-import { Plus, Trash2, ExternalLink, PlayCircle } from 'lucide-react';
+import { Plus, Trash2, Play, ExternalLink } from 'lucide-react';
 
 interface LibraryProps {
   videos: Video[];
-  onAddVideo: (video: Omit<Video, 'id'>) => void;
+  onAddVideo: (video: Video) => void;
   onDeleteVideo: (id: string) => void;
 }
 
 export default function Library({ videos, onAddVideo, onDeleteVideo }: LibraryProps) {
-  const [title, setTitle] = useState('');
-  const [url, setUrl] = useState('');
-  const [category, setCategory] = useState('');
+  const [newUrl, setNewUrl] = useState('');
+  const [newTitle, setNewTitle] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !url) return;
-    onAddVideo({ title, url, category: category || 'Uncategorized' });
-    setTitle('');
-    setUrl('');
-    setCategory('');
+    if (!newUrl) return;
+
+    onAddVideo({
+      id: Date.now().toString(), // 生成唯一ID
+      title: newTitle || '未命名视频', // 如果没填标题，给个默认值
+      url: newUrl,
+      thumbnail: '', // 这里可以扩展自动抓取封面的功能
+      duration: '',
+    });
+
+    // 清空输入框
+    setNewUrl('');
+    setNewTitle('');
   };
 
-  const categories = Array.from(new Set(videos.map(v => v.category)));
-
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-semibold text-gray-900 mb-4">Resource Library</h2>
-        <p className="text-gray-500 mb-6">Manage your follow-along videos from YouTube, Bilibili, etc.</p>
-        
-        <form onSubmit={handleSubmit} className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Video Title</label>
-              <input
-                type="text"
-                value={title}
-                onChange={e => setTitle(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-theme-500 bg-gray-50 focus:bg-white transition-colors"
-                placeholder="e.g., 10 Min Core Workout"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">URL</label>
-              <input
-                type="url"
-                value={url}
-                onChange={e => setUrl(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-theme-500 bg-gray-50 focus:bg-white transition-colors"
-                placeholder="https://..."
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-              <input
-                type="text"
-                value={category}
-                onChange={e => setCategory(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-theme-500 bg-gray-50 focus:bg-white transition-colors"
-                placeholder="e.g., Core, Yoga, HIIT"
-              />
-            </div>
-          </div>
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Video Library</h2>
+        <p className="text-gray-500">管理你的跟练视频库，点击卡片即可直接跳转播放。</p>
+      </div>
+
+      {/* 添加视频的表单 */}
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <Plus className="w-5 h-5 text-theme-500" />
+          Add New Video
+        </h3>
+        <form onSubmit={handleAdd} className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="text"
+            placeholder="视频标题 (例如: 帕梅拉15分钟燃脂)"
+            className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-theme-500 outline-none"
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+          />
+          <input
+            type="url"
+            required
+            placeholder="粘贴视频网址 (URL)"
+            className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-theme-500 outline-none"
+            value={newUrl}
+            onChange={(e) => setNewUrl(e.target.value)}
+          />
           <button
             type="submit"
-            className="flex items-center justify-center w-full md:w-auto px-6 py-2.5 bg-theme-500 text-white rounded-xl hover:bg-theme-600 transition-colors font-medium shadow-sm"
+            className="px-6 py-3 bg-theme-500 text-white font-medium rounded-xl hover:bg-theme-600 transition-colors whitespace-nowrap shadow-md"
           >
-            <Plus className="w-5 h-5 mr-2" />
-            Add Video
+            Save Video
           </button>
         </form>
       </div>
 
-      <div className="space-y-10">
-        {categories.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-3xl border border-dashed border-gray-200">
-            <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <PlayCircle className="w-8 h-8 text-gray-400" />
-            </div>
-            <p className="text-gray-500 font-medium">No videos added yet.</p>
-            <p className="text-gray-400 text-sm mt-1">Start building your library by adding your first video above.</p>
-          </div>
-        ) : (
-          categories.map(cat => (
-            <div key={cat} className="space-y-4">
-              <div className="flex items-center gap-3">
-                <h3 className="text-xl font-semibold text-gray-800">{cat}</h3>
-                <div className="h-px bg-gray-200 flex-1"></div>
-                <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
-                  {videos.filter(v => v.category === cat).length}
-                </span>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {videos.filter(v => v.category === cat).map(video => (
-                  <div key={video.id} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between group hover:shadow-md hover:border-theme-200 transition-all">
-                    <div className="flex items-start gap-4">
-                      <div className="w-10 h-10 rounded-full bg-theme-50 flex items-center justify-center flex-shrink-0 text-theme-500 group-hover:bg-theme-500 group-hover:text-white transition-colors">
-                        <PlayCircle className="w-5 h-5" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-gray-900 line-clamp-2 mb-1 leading-snug">{video.title}</h4>
-                        <a 
-                          href={video.url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-theme-600 text-sm flex items-center hover:underline w-fit"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5 mr-1" />
-                          Watch
-                        </a>
-                      </div>
-                    </div>
-                    <div className="mt-4 pt-4 border-t border-gray-50 flex justify-end">
-                      <button
-                        onClick={() => onDeleteVideo(video.id)}
-                        className="text-gray-400 hover:text-red-500 transition-colors p-1.5 rounded-lg hover:bg-red-50"
-                        title="Delete video"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+      {/* 视频列表展示区 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+        {videos.map((video) => (
+          <div 
+            key={video.id} 
+            className="group relative bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1"
+          >
+            {/* 核心修复：用 a 标签包裹整个卡片主体，并设置 target="_blank" 在新标签页打开 */}
+            <a 
+              href={video.url} 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="block cursor-pointer"
+            >
+              {/* 封面区域 (如果没有封面，显示一个漂亮的渐变底色和播放图标) */}
+              <div className="aspect-video bg-gradient-to-br from-gray-100 to-gray-200 relative flex items-center justify-center">
+                {video.thumbnail ? (
+                  <img src={video.thumbnail} alt={video.title} className="w-full h-full object-cover" />
+                ) : (
+                  <Play className="w-12 h-12 text-gray-300" />
+                )}
+                
+                {/* 悬浮时的播放遮罩效果 */}
+                <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="bg-white/90 rounded-full p-3 shadow-lg transform scale-90 group-hover:scale-100 transition-transform">
+                    <Play className="w-6 h-6 text-theme-500 ml-1" fill="currentColor" />
                   </div>
-                ))}
+                </div>
               </div>
-            </div>
-          ))
+
+              {/* 文本信息区 */}
+              <div className="p-4">
+                <h3 className="font-semibold text-gray-900 line-clamp-2 pr-8">{video.title}</h3>
+                <div className="flex items-center gap-1 mt-2 text-xs text-theme-600 font-medium">
+                  <span>Watch now</span>
+                  <ExternalLink className="w-3 h-3" />
+                </div>
+              </div>
+            </a>
+
+            {/* 删除按钮 (独立于 a 标签外，防止点击删除时跳转网页) */}
+            <button
+              onClick={(e) => {
+                e.preventDefault(); // 阻止默认行为
+                e.stopPropagation(); // 阻止事件冒泡到父级的 a 标签
+                if (window.confirm('确定要删除这个视频吗？')) {
+                  onDeleteVideo(video.id);
+                }
+              }}
+              className="absolute top-3 right-3 p-2 bg-white/90 hover:bg-red-50 text-gray-500 hover:text-red-500 rounded-lg backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-all shadow-sm"
+              title="Delete video"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        ))}
+
+        {videos.length === 0 && (
+          <div className="col-span-full py-12 text-center bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+            <ListVideo className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500">Your library is empty. Add some videos above!</p>
+          </div>
         )}
       </div>
     </div>
