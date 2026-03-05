@@ -10,7 +10,15 @@ import { LayoutDashboard, ListVideo, Settings as SettingsIcon, User, LogOut, Loa
 export default function App() {
   const [session, setSession] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'library' | 'settings'>('dashboard');
+  // 从本地缓存读取上次停留的页面，默认是 dashboard
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'library' | 'settings'>(() => {
+    return (localStorage.getItem('fitjourney_current_tab') as any) || 'dashboard';
+  });
+
+  // 每次切换标签页时，自动存入本地缓存
+  useEffect(() => {
+    localStorage.setItem('fitjourney_current_tab', activeTab);
+  }, [activeTab]);
   
   const { state, isDataLoading, setThemeColor, addVideo, deleteVideo, savePlan, setActivePlan, updateDayRecord, toggleTask } = useFitnessData();
 
