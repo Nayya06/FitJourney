@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Video } from '../types';
-import { Plus, Trash2, Play, ExternalLink } from 'lucide-react';
+import { Plus, Trash2, Play, ExternalLink, ListVideo } from 'lucide-react';
 
 interface LibraryProps {
   videos: Video[];
